@@ -110,6 +110,3 @@ export const mat4 = {
 		];
 	}
 };
-
-
-

@@ -1,20 +1,26 @@
-import { Renderer } from './src/renderer.js?v=3';
+import { Renderer } from './src/renderer.js?v=5';
 import { Camera } from './src/camera.js';
-import { createDefaultWorld, createMinecraftForest } from './src/voxelWorld.js';
+import { createDefaultWorld } from './src/voxelWorld.js?v=7';
 import { loadVoxelsFromJSON } from './src/voxelLoader.js';
+import { ChunkManager } from './src/chunk.js';
 
 const canvas = document.getElementById('glcanvas');
 const gl = canvas.getContext('webgl', { antialias: true, alpha: false });
 
 if (!gl) {
-	console.error('Failed to create WebGL context.');
 	alert('WebGL not supported in this browser or context creation failed.');
 	throw new Error('WebGL not supported');
 }
 
 const renderer = new Renderer(gl);
 const camera = new Camera();
+const chunkManager = new ChunkManager();
 let voxels = createDefaultWorld();
+chunkManager.loadVoxels(voxels);
+
+let frameCount = 0;
+let fps = 0;
+let lastFpsUpdate = performance.now();
 
 function resizeCanvasToDisplaySize() {
 	const pixelRatio = window.devicePixelRatio || 1;
@@ -73,80 +79,97 @@ async function init() {
 	frameToVoxels(voxels);
 
 	setupUI();
+	updateStats();
 	requestAnimationFrame(render);
 }
 
 function setupUI() {
 	const fileInput = document.getElementById('fileInput');
 	const resetBtn = document.getElementById('resetCameraBtn');
-	const sunX = document.getElementById('sunX');
-	const sunY = document.getElementById('sunY');
-	const sunZ = document.getElementById('sunZ');
-	const sunXSlider = document.getElementById('sunXSlider');
-	const sunYSlider = document.getElementById('sunYSlider');
-	const sunZSlider = document.getElementById('sunZSlider');
-	const canvas = document.getElementById('glcanvas');
+	const addSunBtn = document.getElementById('addSunBtn');
+	const sunControlsContainer = document.getElementById('sunControls');
 
 	resetBtn.addEventListener('click', () => {
 		camera.reset();
 	});
 
-	function getSunPos() {
-		const p = renderer.sunPosition || [0, 25, 0];
-		return [p[0], p[1], p[2]];
-	}
-	function setSunPos(pos) {
-		if (typeof renderer.setSunPosition === 'function') {
-			renderer.setSunPosition(pos[0], pos[1], pos[2]);
-		} else {
-			renderer.sunPosition = [pos[0], pos[1], pos[2]];
+	function renderSunControls() {
+		sunControlsContainer.innerHTML = '';
+		renderer.suns.forEach((sun, index) => {
+			const sunDiv = document.createElement('div');
+			sunDiv.className = 'sun-control';
+			sunDiv.innerHTML = `
+				<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+					<span style="font-weight: 600;">Sun ${index + 1}</span>
+					${index > 0 ? `<button class="remove-sun-btn" data-index="${index}" style="font-size: 10px; padding: 2px 6px;">Remove</button>` : ''}
+				</div>
+				<div class="sun-xyz">
+					<label>X</label>
+					<input type="range" class="sunSlider" data-index="${index}" data-axis="0" min="-50" max="50" step="0.5" value="${sun.position[0]}" />
+					<input type="number" class="sunInput" data-index="${index}" data-axis="0" step="0.1" value="${sun.position[0]}" />
+					<label>Y</label>
+					<input type="range" class="sunSlider" data-index="${index}" data-axis="1" min="-50" max="50" step="0.5" value="${sun.position[1]}" />
+					<input type="number" class="sunInput" data-index="${index}" data-axis="1" step="0.1" value="${sun.position[1]}" />
+					<label>Z</label>
+					<input type="range" class="sunSlider" data-index="${index}" data-axis="2" min="-50" max="50" step="0.5" value="${sun.position[2]}" />
+					<input type="number" class="sunInput" data-index="${index}" data-axis="2" step="0.1" value="${sun.position[2]}" />
+				</div>
+			`;
+			sunControlsContainer.appendChild(sunDiv);
+		});
+
+		document.querySelectorAll('.sunSlider').forEach(slider => {
+			slider.addEventListener('input', (e) => {
+				const index = parseInt(e.target.dataset.index);
+				const axis = parseInt(e.target.dataset.axis);
+				const value = parseFloat(e.target.value);
+				const sun = renderer.suns[index];
+				sun.position[axis] = value;
+				renderer.setSunPosition(index, sun.position[0], sun.position[1], sun.position[2]);
+				const input = document.querySelector(`.sunInput[data-index="${index}"][data-axis="${axis}"]`);
+				if (input) input.value = value.toFixed(1);
+			});
+		});
+
+		document.querySelectorAll('.sunInput').forEach(input => {
+			const onChange = (e) => {
+				const index = parseInt(e.target.dataset.index);
+				const axis = parseInt(e.target.dataset.axis);
+				const value = parseFloat(e.target.value);
+				const sun = renderer.suns[index];
+				sun.position[axis] = value;
+				renderer.setSunPosition(index, sun.position[0], sun.position[1], sun.position[2]);
+				const slider = document.querySelector(`.sunSlider[data-index="${index}"][data-axis="${axis}"]`);
+				if (slider) slider.value = value;
+			};
+			input.addEventListener('input', onChange);
+			input.addEventListener('change', onChange);
+		});
+
+		document.querySelectorAll('.remove-sun-btn').forEach(btn => {
+			btn.addEventListener('click', (e) => {
+				const index = parseInt(e.target.dataset.index);
+				renderer.removeSun(index);
+				renderSunControls();
+			});
+		});
+
+		if (addSunBtn) {
+			addSunBtn.disabled = renderer.suns.length >= 3;
 		}
 	}
-	function syncXYZFromPos() {
-		const p = getSunPos();
-		if (sunX) sunX.value = String(Number(p[0].toFixed(1)));
-		if (sunY) sunY.value = String(Number(p[1].toFixed(1)));
-		if (sunZ) sunZ.value = String(Number(p[2].toFixed(1)));
-		if (sunXSlider) sunXSlider.value = String(p[0]);
-		if (sunYSlider) sunYSlider.value = String(p[1]);
-		if (sunZSlider) sunZSlider.value = String(p[2]);
+
+	if (addSunBtn) {
+		addSunBtn.addEventListener('click', () => {
+			if (renderer.suns.length < 3) {
+				const offset = renderer.suns.length * 10;
+				renderer.addSun(offset, 25, offset);
+				renderSunControls();
+			}
+		});
 	}
-	function updatePosFromXYZ() {
-		if (!sunX || !sunY || !sunZ) return;
-		const x = Number(sunX.value);
-		const y = Number(sunY.value);
-		const z = Number(sunZ.value);
-		setSunPos([x, y, z]);
-		if (sunXSlider) sunXSlider.value = String(x);
-		if (sunYSlider) sunYSlider.value = String(y);
-		if (sunZSlider) sunZSlider.value = String(z);
-	}
-	function updatePosFromSliders() {
-		if (!sunXSlider || !sunYSlider || !sunZSlider) return;
-		const x = Number(sunXSlider.value);
-		const y = Number(sunYSlider.value);
-		const z = Number(sunZSlider.value);
-		setSunPos([x, y, z]);
-		if (sunX) sunX.value = String(Number(x.toFixed(1)));
-		if (sunY) sunY.value = String(Number(y.toFixed(1)));
-		if (sunZ) sunZ.value = String(Number(z.toFixed(1)));
-	}
-	syncXYZFromPos();
-	if (sunX && sunY && sunZ) {
-		const onNumChange = () => updatePosFromXYZ();
-		sunX.addEventListener('input', onNumChange);
-		sunY.addEventListener('input', onNumChange);
-		sunZ.addEventListener('input', onNumChange);
-		sunX.addEventListener('change', onNumChange);
-		sunY.addEventListener('change', onNumChange);
-		sunZ.addEventListener('change', onNumChange);
-	}
-	if (sunXSlider && sunYSlider && sunZSlider) {
-		const onSliderChange = () => updatePosFromSliders();
-		sunXSlider.addEventListener('input', onSliderChange);
-		sunYSlider.addEventListener('input', onSliderChange);
-		sunZSlider.addEventListener('input', onSliderChange);
-	}
+
+	renderSunControls();
 
 	fileInput.addEventListener('change', (e) => {
 		const input = e.target;
@@ -158,16 +181,14 @@ function setupUI() {
 				const json = JSON.parse(String(reader.result));
 				const loaded = loadVoxelsFromJSON(json);
 				voxels = loaded;
-				console.log(`Loaded ${voxels.length} voxels from "${file.name}"`);
+				chunkManager.loadVoxels(voxels);
 				frameToVoxels(voxels);
-				syncXYZFromPos();
+				updateStats();
 			} catch (err) {
-				console.error('Failed to load voxel JSON:', err);
-				alert('Invalid voxel JSON file. See console for details.');
+				alert('Invalid voxel JSON file.');
 			}
 		};
 		reader.onerror = () => {
-			console.error('Failed to read file.');
 			alert('Failed to read file.');
 		};
 		reader.readAsText(file);
@@ -175,10 +196,52 @@ function setupUI() {
 	});
 }
 
+function updateStats() {
+	const fpsEl = document.getElementById('statFps');
+	const chunksEl = document.getElementById('statChunks');
+	const voxelsEl = document.getElementById('statVoxels');
+	const drawsEl = document.getElementById('statDraws');
+
+	if (fpsEl) {
+		const fpsValue = fps > 0 ? fps.toFixed(0) : '60';
+		fpsEl.textContent = fpsValue;
+		const fpsNum = parseFloat(fpsValue);
+		fpsEl.className = 'value ' + (fpsNum >= 55 ? 'stat-good' : fpsNum >= 30 ? 'stat-warn' : 'stat-bad');
+	}
+	if (chunksEl) {
+		const stats = chunkManager.getStats();
+		chunksEl.textContent = stats.nonEmptyChunks.toLocaleString();
+		chunksEl.className = 'value ' + (stats.nonEmptyChunks < 50 ? 'stat-good' : stats.nonEmptyChunks < 200 ? 'stat-warn' : 'stat-bad');
+	}
+	if (voxelsEl) {
+		const count = voxels.length;
+		voxelsEl.textContent = count.toLocaleString();
+		voxelsEl.className = 'value ' + (count < 5000 ? 'stat-good' : count < 20000 ? 'stat-warn' : 'stat-bad');
+	}
+	if (drawsEl) {
+		const draws = renderer.lastDrawCount || (voxels.length + 1);
+		drawsEl.textContent = draws.toLocaleString();
+		drawsEl.className = 'value ' + (draws < 5000 ? 'stat-good' : draws < 20000 ? 'stat-warn' : 'stat-bad');
+	}
+}
+
 function render() {
+	const now = performance.now();
+	frameCount++;
+	if (now - lastFpsUpdate >= 500) {
+		fps = (frameCount / (now - lastFpsUpdate)) * 1000;
+		frameCount = 0;
+		lastFpsUpdate = now;
+		updateStats();
+	}
+
 	camera.getViewMatrix();
-	renderer.drawScene(voxels, camera);
+	renderer.drawChunks(chunkManager, camera);
 	requestAnimationFrame(render);
 }
 
-init();
+if (document.readyState === 'loading') {
+	document.addEventListener('DOMContentLoaded', init);
+} else {
+	init();
+}

@@ -65,52 +65,96 @@
 			color: #80cbc4;
 			text-decoration: none;
 		}
-		#light-xyz {
+		#sunControls {
 			margin-top: 6px;
+		}
+		.sun-control {
+			margin-bottom: 8px;
+			padding: 6px;
+			background: rgba(255, 255, 255, 0.03);
+			border-radius: 4px;
+		}
+		.sun-xyz {
 			display: grid;
 			grid-template-columns: auto 1fr 60px;
-			gap: 6px 8px;
+			gap: 4px 6px;
 			align-items: center;
+			font-size: 11px;
 		}
-		#light-xyz label {
-			font-size: 12px;
+		.sun-xyz label {
 			color: #ccc;
 		}
-		#light-xyz input[type="number"] {
+		.sun-xyz input[type="number"] {
 			width: 60px;
 			background: #1b1b1b;
 			border: 1px solid rgba(255,255,255,0.12);
 			color: #eee;
-			border-radius: 6px;
-			padding: 4px 6px;
+			border-radius: 4px;
+			padding: 3px 5px;
+			font-size: 11px;
 		}
-		#light-xyz input[type="range"] {
+		.sun-xyz input[type="range"] {
 			width: 100%;
 			accent-color: #ffd54f;
 		}
+		.remove-sun-btn {
+			background: #f44336;
+			color: white;
+			border: none;
+			border-radius: 4px;
+			cursor: pointer;
+		}
+		.remove-sun-btn:hover {
+			background: #d32f2f;
+		}
+		#stats {
+			position: fixed;
+			top: 12px;
+			right: 12px;
+			background: rgba(20, 20, 20, 0.85);
+			border: 1px solid rgba(255,255,255,0.12);
+			border-radius: 8px;
+			padding: 8px 12px;
+			backdrop-filter: blur(4px);
+			font-family: 'SF Mono', 'Consolas', monospace;
+			font-size: 12px;
+			min-width: 120px;
+		}
+		#stats div {
+			display: flex;
+			justify-content: space-between;
+			gap: 12px;
+			margin: 2px 0;
+		}
+		#stats .label {
+			color: #888;
+		}
+		#stats .value {
+			font-weight: 600;
+		}
+		.stat-good { color: #4caf50; }
+		.stat-warn { color: #ffc107; }
+		.stat-bad { color: #f44336; }
 	</style>
 </head>
 <body>
 	<canvas id="glcanvas"></canvas>
+	<div id="stats">
+		<div><span class="label">FPS</span><span id="statFps" class="value">--</span></div>
+		<div><span class="label">Chunks</span><span id="statChunks" class="value">--</span></div>
+		<div><span class="label">Voxels</span><span id="statVoxels" class="value">--</span></div>
+		<div><span class="label">Draws</span><span id="statDraws" class="value">--</span></div>
+	</div>
 	<div id="ui">
 		<div id="title">WebGL Voxel Viewer</div>
 		<div id="controls">
 			<input id="fileInput" type="file" accept=".json,application/json" />
 			<button id="resetCameraBtn" type="button">Reset Camera</button>
+			<button id="addSunBtn" type="button">Add Sun</button>
 		</div>
-		<div id="light-xyz">
-			<label for="sunX">Sun X</label>
-			<input id="sunXSlider" type="range" min="-50" max="50" step="0.5" value="0" />
-			<input id="sunX" type="number" step="0.1" />
-			<label for="sunY">Sun Y</label>
-			<input id="sunYSlider" type="range" min="-50" max="50" step="0.5" value="25" />
-			<input id="sunY" type="number" step="0.1" />
-			<label for="sunZ">Sun Z</label>
-			<input id="sunZSlider" type="range" min="-50" max="50" step="0.5" value="0" />
-			<input id="sunZ" type="number" step="0.1" />
-		</div>
+		<div id="sunControls"></div>
 		<div id="hint">Drag to orbit, scroll to zoom</div>
 	</div>
-	<script type="module" src="./main.js"></script>
+	<script type="module" src="./main.js?v=31"></script>
 </body>
 </html>

@@ -15,5 +15,3 @@ void main() {
 	v_normal = mat3(u_model) * a_normal;
 	v_worldPos = worldPos.xyz;
 }
-
-

@@ -31,6 +31,3 @@ export function loadVoxelsFromJSON(jsonData) {
 	}
 	return result;
 }
-
-
-

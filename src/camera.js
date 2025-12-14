@@ -88,6 +88,3 @@ export class Camera {
 		canvas.addEventListener('wheel', onWheel, { passive: false });
 	}
 }
-
-
-
